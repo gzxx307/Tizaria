@@ -1,0 +1,68 @@
+# 这是一份标准的 Unity 项目 .gitignore 配置
+
+# [自动生成的文件和文件夹]
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# [内存抓取文件]
+/[Mm]emoryCaptures/
+
+# [Asset 商店相关的缓存]
+/[Aa]ssets/AssetStoreTools*
+
+# [构建生成的应用可执行文件]
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# [崩溃报告]
+sysinfo.txt
+
+# [崩溃报告生成的文件夹]
+crashlytics-build.properties
+
+# [打包后的 IL2CPP 缓存]
+/[Ii]l2cpp_cache/
+
+# [各种 IDE 及编辑器的工程文件和配置]
+# Visual Studio / Visual Studio Code / Rider
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.idea/
+.vs/
+.vscode/
+ExportedObj/
+.consulo/
+*.shproj
+
+# [Unity3D 生成的元数据冲突 (对应被忽略的文件)]
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# [操作系统生成的缩略图和系统文件]
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
