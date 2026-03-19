@@ -6,18 +6,23 @@ public static class JudgementLibrary
 {
     /// <summary>
     /// 根据配置表计算等级
+    /// </summary>
     /// <param name="Score"> 分数 </param>
     /// <param name="NoteCount"> 物量 </param>
-    /// <param name="IsFullCombo"> 是否为全连 </param>
     /// <param name="IsStrict"> 是否为严判 </param>
     /// <param name="RankingRuleSo"> 结算等级配置SO </param>
+    /// <param name="IsStrictT"> 是否为严判理论值（严判 T），用于结算界面特殊标记 </param>
     /// <returns> 评级 </returns>
-    /// </summary>
-    public static Rank GetRank(int Score, int NoteCount, bool IsFullCombo, bool IsStrict, RankingRuleSO RankingRuleSo)
+    public static Rank GetRank(int Score, int NoteCount, bool IsStrict, RankingRuleSO RankingRuleSo, out bool IsStrictT)
     {
-        // 如果不是严判，则不会到达理论值，直接将 NoteCount 置零以满足 T 级条件
-        if (!IsStrict) NoteCount = 0; 
-        if (Score == RankingRuleSo.TScore + NoteCount) return Rank.T;
+        IsStrictT = false;
+
+        if (IsStrict && Score == RankingRuleSo.TScore + NoteCount)
+        {
+            IsStrictT = true;
+            return Rank.T;
+        }
+        if (Score == RankingRuleSo.TScore) return Rank.T;
         if (Score >= RankingRuleSo.SScore) return Rank.S;
         if (Score >= RankingRuleSo.AScore) return Rank.A;
         if (Score >= RankingRuleSo.BScore) return Rank.B;
@@ -40,5 +45,10 @@ public static class JudgementLibrary
         if (abs <= JudgementTimeSo.BadWindow) return Judgement.Bad;
         // 如果超出判定时间范围则自动判定，并判定为Miss
         return Judgement.Miss;
+    }
+
+    public static bool IsMissed(float deltaMis, JudgementTimeSO JudgementTimeSo)
+    {
+        return deltaMis > JudgementTimeSo.BadWindow;
     }
 }
