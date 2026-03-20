@@ -36,4 +36,34 @@ public static class Transformer
     {
         return $"{accuracy * 100f:F2}%";
     }
+
+    /// <summary>
+    /// 将分数转换为长度为8的字符串，用于显示分数
+    /// </summary>
+    /// <param name="num"> 整形分数 </param>
+    /// <returns> 字符串形式的分数 </returns>
+    public static string ScoreToStringScore(int num)
+    {
+        string str = num.ToString();
+        str = (8 - str.Length) * '0' + str;
+        return str;
+    }
+
+    /// <summary>
+    /// 将长度为八的字符串转换为整形分数，如果转换不了则返回0并报错
+    /// </summary>
+    /// <param name="str"> 字符串形式的分数 </param>
+    /// <returns> 整形分数 </returns>
+    public static int StringScoreToScore(string str)
+    {
+        if (int.TryParse(str, out int num))
+        {
+            return num;
+        }
+        else
+        {
+            Debug.LogError("Change string (" + str + ") to int occured an error!");
+            return 0;
+        }
+    }
 }
