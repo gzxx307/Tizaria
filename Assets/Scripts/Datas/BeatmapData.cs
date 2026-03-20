@@ -75,6 +75,8 @@ public class BeatmapData
     public string DifficultyDescription;
     // 难度（一位小数）
     public float Difficulty;
+    // 轨道数
+    public int ColumnCount;
     
     // 谱面参数
     
