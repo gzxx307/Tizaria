@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 
 /// <summary>
@@ -20,6 +22,13 @@ public class GameRoot : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        
+        SceneManager.LoadScene("SplashScene");
+        
+    }
+
+    private void Start()
+    {
     }
 
     // 当前游戏的Player数据

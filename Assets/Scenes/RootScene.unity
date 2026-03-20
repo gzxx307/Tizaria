@@ -224,6 +224,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1897986890}
   - component: {fileID: 1897986891}
+  - component: {fileID: 1897986892}
   m_Layer: 0
   m_Name: GameRoot
   m_TagString: Untagged
@@ -261,6 +262,18 @@ MonoBehaviour:
   noteScoreSo: {fileID: 11400000, guid: 395e0054a0afc6b48bbb100a2528ee63, type: 2}
   judgementWindowSo: {fileID: 11400000, guid: f6cedc3b01ea3754f9b2f261723c7fa2, type: 2}
   rankingRuleSo: {fileID: 11400000, guid: 66a56624e53a89546b0fe6253035155b, type: 2}
+--- !u!114 &1897986892
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1897986889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b588923fecf46d1ad4eda3dca99b10d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
