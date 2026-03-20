@@ -7,8 +7,6 @@ using UnityEngine;
 /// </summary>
 public static class Calculator
 {
-    // ─────────────────────── 单音符得分列表 ────────────────────────
-
     /// <summary>
     /// 计算每个判定等级对应的「单音符得分」列表，顺序对应 <see cref="Judgement"/> 枚举。
     /// <para>总分公式：严判 = 10,000,000 + NoteCount；普通 = 10,000,000</para>
@@ -16,12 +14,11 @@ public static class Calculator
     /// </summary>
     /// <param name="noteCount">谱面物量</param>
     /// <param name="isStrict">是否严判</param>
-    /// <param name="so">判定得分配置</param>
     /// <returns>长度为 5 的列表 [Perfect, Great, Good, Bad, Miss]</returns>
-    public static List<int> GetNoteScores(int noteCount, bool isStrict, JudgementScoreSO so)
+    public static List<int> GetNoteScores(int noteCount, bool isStrict)
     {
-        if (noteCount <= 0) throw new ArgumentOutOfRangeException(nameof(noteCount), "物量必须大于 0");
-
+        NoteScoreSO so = ConfigBus.Instance.NoteScore;
+        
         int totalScore = isStrict ? 10_000_000 + noteCount : 10_000_000;
         int baseWeight = so.PerfectScore + so.GreatScore + so.GoodScore + so.BadScore + so.MissScore;
 
@@ -39,9 +36,9 @@ public static class Calculator
     /// <summary>
     /// 获取指定判定等级的单音符得分。
     /// </summary>
-    public static int GetNoteScore(Judgement judgement, int noteCount, bool isStrict, JudgementScoreSO so)
+    public static int GetNoteScore(Judgement judgement, int noteCount, bool isStrict)
     {
-        var scores = GetNoteScores(noteCount, isStrict, so);
+        var scores = GetNoteScores(noteCount, isStrict);
         return scores[(int)judgement];
     }
 

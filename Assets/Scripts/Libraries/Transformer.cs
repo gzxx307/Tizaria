@@ -30,7 +30,7 @@ public static class Transformer
     }
     
     /// <summary>
-    /// 将 0.0~1.0 的准确率转换为带两位小数的百分比字符串，例如 "98.75%"。
+    /// 将acc转换为两位小数带百分号的字符串，例如 "79.90%"。
     /// </summary>
     public static string AccuracyToString(float accuracy)
     {

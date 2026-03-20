@@ -4,21 +4,21 @@ using UnityEngine;
 
 
 /// <summary>
-/// 排名规则配置，定义了不同排名等级对应的分数阈值。
+/// 结算等级门槛
 /// </summary>
 [CreateAssetMenu(fileName = "RankingRuleSO", menuName = "Configs/RankingRuleSO")]
 public class RankingRuleSO : ScriptableObject
 {
-    // T
-    public int TScore;
+    // T (AP)
+    public int TScore = 10000000;
     // S
-    public int SScore;
+    public int SScore = 9500000;
     // A
-    public int AScore;
+    public int AScore = 9000000;
     // B
-    public int BScore;
+    public int BScore = 8000000;
     // C
-    public int CScore;
+    public int CScore = 7000000;
     // F
-    public int FScore;
+    public int FScore = 0;
 }
