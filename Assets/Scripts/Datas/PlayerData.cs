@@ -4,6 +4,12 @@ using System.Collections.Generic;
 using UnityEngine;
 
 
+[Serializable]
+public class PlayerDataSet
+{
+    public List<PlayerData> Players;
+}
+
 /// <summary>
 /// 玩家数据，玩家在整个游戏中的唯一存档。
 /// 在开启游戏并登录时进行读取，并在游戏过程中进行修改与保存。
