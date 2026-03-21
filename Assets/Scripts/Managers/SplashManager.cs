@@ -2,11 +2,13 @@ using System;
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
+using UnityEngine.UI;
 
 public class SplashManager : MonoBehaviour
 {
-    [SerializeField] private GameObject Logo;
+    public GameObject Logo;
     private SpriteRenderer _logoSpriteRenderer;
 
     // 图标淡入速度
@@ -25,7 +27,7 @@ public class SplashManager : MonoBehaviour
     public int CharIntervalFrames = 3;
 
     public string ClickTip = "Click anywhere to complete";
-    public float TipFadeInSpeed = 5.0f;
+    public float TipFadeInSpeed = 0.7f;
     public TextMeshProUGUI TipText;
 
     // 提示文本闪烁频率
@@ -36,11 +38,20 @@ public class SplashManager : MonoBehaviour
     // 正在进行动画
     private bool _isSplashing = true;
     private Coroutine _blinkCoroutine;
-
+    
+    // 黑幕GameObject
+    public GameObject BlackMaskPanel;
+    private Image BlackMaskImage;
+    public float MaskFadeInSpeed = 1.0f;
+    
+    // 正在进入游戏
+    private bool _isEnteringGame = false;
+    
     private void Start()
     {
         _logoSpriteRenderer = Logo.GetComponent<SpriteRenderer>();
         if (_logoSpriteRenderer != null) StartCoroutine(Splash());
+        BlackMaskImage = BlackMaskPanel.GetComponent<Image>();
     }
 
     private void Update()
@@ -48,7 +59,7 @@ public class SplashManager : MonoBehaviour
         if (Input.GetMouseButton(0))
         {
             if (_isSplashing) SkipSplashing();
-            else EnterGame();
+            else if (!_isEnteringGame) StartCoroutine(EnterGame());
         }
     }
 
@@ -137,8 +148,16 @@ public class SplashManager : MonoBehaviour
         color.a = 0f;
         tmp.color = color;
 
+        // 首先将alpha抬到TipMinAlpha避免透明度瞬间变化
+        while (color.a < 1)
+        {
+            color.a += TipFadeInSpeed * Time.deltaTime;
+            tmp.color = color;
+            yield return null;
+        }
+        
+        float t = Mathf.PI * 0.5f;
         // 开始闪烁
-        float t = 0f;
         while (true)
         {
             t += Time.deltaTime / TipBlinkDuration * Mathf.PI;
@@ -179,9 +198,21 @@ public class SplashManager : MonoBehaviour
     }
     
     // 进入游戏
-    private void EnterGame()
+    private IEnumerator EnterGame()
     {
+        // 进入正在进入游戏状态
+        _isEnteringGame = true;
         
+        // 黑幕淡入
+        while (BlackMaskImage.color.a < 1f)
+        {
+            var color = BlackMaskImage.color;
+            color.a += MaskFadeInSpeed * Time.deltaTime;
+            BlackMaskImage.color = color;
+            yield return null;
+        }
+        
+        SceneManager.LoadScene("LoginScene");
     }
 
     // 工具函数
