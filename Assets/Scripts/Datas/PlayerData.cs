@@ -24,7 +24,7 @@ public class PlayerData
     // 名称
     public string Name;
     // rks
-    public int Ranks;
+    public float Ranks;
     // 头像路径
     public string AvatarPath;
     // 账号创建时间

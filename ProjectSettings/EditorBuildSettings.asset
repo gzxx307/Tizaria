@@ -14,4 +14,13 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/LoginScene.unity
     guid: 1ed4f18e987e6824584c886e1af95605
+  - enabled: 1
+    path: Assets/Scenes/SongSelectScene.unity
+    guid: 0a6e2927c80e9204eae33b1aaee18033
+  - enabled: 1
+    path: Assets/Scenes/GameplayScene.unity
+    guid: c82e3c0f45b92794c9f1db17b243e461
+  - enabled: 1
+    path: Assets/Scenes/BeatmapEditorScene.unity
+    guid: 2fe51b7236b896b43b43a2a524ed0dff
   m_configObjects: {}
