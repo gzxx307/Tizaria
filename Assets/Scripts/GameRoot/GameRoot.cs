@@ -89,4 +89,11 @@ public class GameRoot : MonoBehaviour
     {
         CurrentSession = null;
     }
+
+    // 如果在GameRoot之前加载，则直接拒绝
+    public static bool AfterGameRoot = false;
+    // 获取静态变量
+    public static bool CheckToLoad() => AfterGameRoot;
+    // 允许加载
+    public static void ReadyToLoad() => AfterGameRoot = true;
 }

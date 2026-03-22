@@ -55,6 +55,8 @@ public class LoginManager : MonoBehaviour
 
     private void Awake()
     {
+        if (!GameRoot.CheckToLoad()) return;
+        
         // 初始面板状态
         ShowPanel(PanelType.LoginSignup);
 
@@ -72,6 +74,8 @@ public class LoginManager : MonoBehaviour
 
     private void Start()
     {
+        if (!GameRoot.CheckToLoad()) return;
+        
         BindButtons();
         BuildPlayerList();
 

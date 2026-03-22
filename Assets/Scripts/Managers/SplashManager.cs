@@ -49,6 +49,8 @@ public class SplashManager : MonoBehaviour
     
     private void Start()
     {
+        GameRoot.ReadyToLoad();
+        
         _logoSpriteRenderer = Logo.GetComponent<SpriteRenderer>();
         if (_logoSpriteRenderer != null) StartCoroutine(Splash());
         BlackMaskImage = BlackMaskPanel.GetComponent<Image>();
