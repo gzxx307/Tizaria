@@ -1139,6 +1139,8 @@ MonoBehaviour:
   signupBackButton: {fileID: 1927498599}
   confirmButton: {fileID: 448061310}
   inputName: {fileID: 854061492}
+  blackMaskPanel: {fileID: 1573693527}
+  fadeDuration: 0.7
   nextSceneName: SongSelectScene
 --- !u!114 &486195224
 MonoBehaviour:

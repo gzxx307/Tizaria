@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -29,6 +30,11 @@ public class LoginManager : MonoBehaviour
     [SerializeField] private Button confirmButton;
     [SerializeField] private TMP_InputField inputName;
 
+    [Header("黑幕过渡")]
+    [SerializeField] private GameObject blackMaskPanel;
+    [Tooltip("淡入 / 淡出的持续时间（秒）")]
+    [SerializeField] private float fadeDuration = 0.7f;
+
     [Header("设置")]
     [Tooltip("登录或注册成功后跳转的场景名")]
     [SerializeField] private string nextSceneName = "SongSelectScene";
@@ -39,6 +45,10 @@ public class LoginManager : MonoBehaviour
 
     private readonly List<PlayerItemUI> _spawnedItems = new List<PlayerItemUI>();
 
+    private Image _blackMaskImage;
+    // 防止重复触发跳转
+    private bool _isTransitioning;
+
     // ─────────────────────────────────────────────────
     //  生命周期
     // ─────────────────────────────────────────────────
@@ -47,12 +57,27 @@ public class LoginManager : MonoBehaviour
     {
         // 初始面板状态
         ShowPanel(PanelType.LoginSignup);
+
+        // 获取黑幕 Image，并将 alpha 设为完全不透明，以便淡出动画从黑幕开始
+        if (blackMaskPanel != null)
+        {
+            _blackMaskImage = blackMaskPanel.GetComponent<Image>();
+            SetMaskAlpha(1f);
+        }
+        else
+        {
+            Debug.LogWarning("[LoginManager] blackMaskPanel 未赋值，跳过黑幕过渡");
+        }
     }
 
     private void Start()
     {
         BindButtons();
         BuildPlayerList();
+
+        // 场景进入时：黑幕淡出（不透明 → 透明）
+        if (_blackMaskImage != null)
+            StartCoroutine(FadeMask(1f, 0f));
     }
 
     // ─────────────────────────────────────────────────
@@ -81,9 +106,9 @@ public class LoginManager : MonoBehaviour
         signupPanel.SetActive(panel == PanelType.Signup);
     }
 
-    private void OnLoginButtonClicked()  => ShowPanel(PanelType.Login);
+    private void OnLoginButtonClicked() => ShowPanel(PanelType.Login);
     private void OnSignupButtonClicked() => ShowPanel(PanelType.Signup);
-    private void OnBackClicked()         => ShowPanel(PanelType.LoginSignup);
+    private void OnBackClicked() => ShowPanel(PanelType.LoginSignup);
 
     // ─────────────────────────────────────────────────
     //  LoginPanel：玩家列表
@@ -109,7 +134,6 @@ public class LoginManager : MonoBehaviour
 
         if (dataSet?.Players == null || dataSet.Players.Count == 0)
         {
-            // TODO: 可以在此显示"还没有玩家，请先注册"提示
             Debug.Log("[LoginManager] 当前没有玩家档案");
             return;
         }
@@ -126,9 +150,11 @@ public class LoginManager : MonoBehaviour
     /// <summary> 点击列表中某个玩家 → 登录并跳转 </summary>
     private void OnPlayerSelected(PlayerData player)
     {
+        if (_isTransitioning) return;
+
         PlayerDataManager.Instance.UpdateLastLogin(player);
         GameRoot.Instance.SetPlayerData(player);
-        SceneManager.LoadScene(nextSceneName);
+        StartCoroutine(FadeAndLoadScene());
     }
 
     // ─────────────────────────────────────────────────
@@ -137,6 +163,8 @@ public class LoginManager : MonoBehaviour
 
     private void OnConfirmButtonClicked()
     {
+        if (_isTransitioning) return;
+
         string name = inputName.text.Trim();
 
         // 验证：不能为空
@@ -158,8 +186,50 @@ public class LoginManager : MonoBehaviour
         // 创建 → 保存 → 直接以该玩家身份登录
         PlayerData newPlayer = PlayerDataManager.Instance.CreateNewPlayer(name);
         PlayerDataManager.Instance.AddPlayer(newPlayer);
-
         GameRoot.Instance.SetPlayerData(newPlayer);
+        StartCoroutine(FadeAndLoadScene());
+    }
+
+    // ─────────────────────────────────────────────────
+    //  黑幕过渡
+    // ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// 黑幕淡入后跳转场景。
+    /// 若没有黑幕组件则直接跳转。
+    /// </summary>
+    private IEnumerator FadeAndLoadScene()
+    {
+        _isTransitioning = true;
+        yield return FadeMask(0f, 1f);   // 透明 → 黑
+
         SceneManager.LoadScene(nextSceneName);
+    }
+
+    /// <summary>
+    /// 线性插值改变黑幕 alpha。
+    /// </summary>
+    /// <param name="from">起始 alpha</param>
+    /// <param name="to">目标 alpha</param>
+    private IEnumerator FadeMask(float from, float to)
+    {
+        float elapsed = 0f;
+        SetMaskAlpha(from);
+
+        while (elapsed < fadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            SetMaskAlpha(Mathf.Lerp(from, to, elapsed / fadeDuration));
+            yield return null;
+        }
+
+        SetMaskAlpha(to);
+    }
+
+    private void SetMaskAlpha(float alpha)
+    {
+        Color c = _blackMaskImage.color;
+        c.a = alpha;
+        _blackMaskImage.color = c;
     }
 }
