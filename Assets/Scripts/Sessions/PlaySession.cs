@@ -14,7 +14,7 @@ public class PlaySession
     // 实时成绩（每帧刷新）
     
     // 当前分数
-    public int CurrentScore { get; set; }
+    public int CurrentScore      { get; set; }
     // 当前连击数
     public int CurrentCombo { get; set; }
     // 最大连击数
