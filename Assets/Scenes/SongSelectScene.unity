@@ -1077,7 +1077,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveDirection: 0
   hoverOffset: 16
-  animDuration: 0.15
+  smoothSpeed: 20
+  snapThreshold: 0.1
   onNavigate:
     m_PersistentCalls:
       m_Calls: []
@@ -1613,7 +1614,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveDirection: 1
   hoverOffset: 16
-  animDuration: 0.15
+  smoothSpeed: 20
+  snapThreshold: 0.1
   onNavigate:
     m_PersistentCalls:
       m_Calls: []
