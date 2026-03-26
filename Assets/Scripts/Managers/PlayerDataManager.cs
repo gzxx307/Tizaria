@@ -88,7 +88,7 @@ public class PlayerDataManager : MonoBehaviour
 
         return new PlayerData
         {
-            Uid = Guid.NewGuid().ToString(),
+            Uid = GenerateUniqueUid(),
             Name = playerName,
             Ranks = 0,
             AvatarPath = "",
@@ -143,5 +143,25 @@ public class PlayerDataManager : MonoBehaviour
     {
         return _dataSet.Players.Exists(
             p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ─────────────────────────────────────────────────
+    //  内部工具
+    // ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// 生成一个不与现有玩家重复的十位数字 UID（1000000000 ~ 9999999999）。
+    /// </summary>
+    private string GenerateUniqueUid()
+    {
+        var rng = new System.Random();
+        string uid;
+        do
+        {
+            long num = (long)(rng.NextDouble() * 9_000_000_000L) + 1_000_000_000L;
+            uid = num.ToString();
+        }
+        while (_dataSet.Players.Exists(p => p.Uid == uid));
+        return uid;
     }
 }
