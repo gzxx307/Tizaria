@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "mcp__mcp-unity__get_scene_info",
+      "mcp__mcp-unity__get_gameobject",
+      "mcp__mcp-unity__batch_execute",
+      "mcp__mcp-unity__update_gameobject"
+    ]
+  }
+}
