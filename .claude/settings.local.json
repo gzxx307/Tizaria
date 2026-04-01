@@ -6,7 +6,8 @@
       "mcp__mcp-unity__get_gameobject",
       "mcp__mcp-unity__batch_execute",
       "mcp__mcp-unity__update_gameobject",
-      "mcp__mcp-unity__load_scene"
+      "mcp__mcp-unity__load_scene",
+      "Bash(python:*)"
     ]
   }
 }

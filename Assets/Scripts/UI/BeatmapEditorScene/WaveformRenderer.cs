@@ -6,10 +6,13 @@ using UnityEngine.UI;
 /// <summary>
 /// 将 AudioClip 渲染为振幅波形图，显示在同 GameObject 的 RawImage 上。
 ///
-/// 使用方式：
-///   1. 将此脚本挂载在含 RawImage 的 GameObject 上
-///   2. 调用 RenderFull(clip) 渲染整首歌，或 RenderRange(clip, startSec, endSec) 渲染片段
-///   3. 渲染完成后触发 OnRenderComplete 事件（可选监听）
+/// vertical = true（默认）：
+///   竖向模式，适用于垂直滚动的谱面编辑器。
+///   Y 轴 = 时间（顶部 = time=0，底部 = time=end），
+///   X 轴 = 振幅（以纹理宽度中心为基准，向左右延伸）。
+///
+/// vertical = false：
+///   横向模式，X 轴 = 时间，Y 轴 = 振幅（以高度中心为基准）。
 /// </summary>
 [RequireComponent(typeof(RawImage))]
 public class WaveformRenderer : MonoBehaviour
@@ -18,35 +21,34 @@ public class WaveformRenderer : MonoBehaviour
     //  Inspector 设置
     // ─────────────────────────────────────────────────
 
+    [Header("方向")]
+    [Tooltip("true = 竖向（时间 = Y 轴），false = 横向（时间 = X 轴）")]
+    public bool vertical = true;
+
     [Header("纹理分辨率")]
-    [Tooltip("波形图横向像素数，越大细节越清晰但生成越慢")]
-    public int textureWidth = 2048;
-    [Tooltip("波形图纵向像素数")]
-    public int textureHeight = 128;
+    [Tooltip("沿时间轴方向的最大像素数")]
+    public int maxTimeAxisResolution = 4096;
+    [Tooltip("垂直振幅轴方向的像素数")]
+    public int amplitudeAxisResolution = 64;
 
     [Header("颜色")]
     public Color backgroundColor = new Color(0.08f, 0.08f, 0.10f, 1f);
-    [Tooltip("正常振幅区域的波形颜色")]
     public Color waveformColor = new Color(0.25f, 0.75f, 0.40f, 1f);
-    [Tooltip("高振幅（峰值）区域的波形颜色")]
     public Color peakColor = new Color(1.00f, 0.40f, 0.20f, 1f);
-    [Tooltip("中轴参考线颜色")]
-    public Color centerLineColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+    public Color centerLineColor = new Color(0.25f, 0.25f, 0.28f, 1f);
 
     [Header("阈值")]
     [Range(0f, 1f)]
-    [Tooltip("振幅超过此值时改用 peakColor 着色")]
     public float peakThreshold = 0.75f;
 
     [Header("性能")]
-    [Tooltip("协程每帧最多处理的像素列数，调低可减少帧卡顿")]
-    public int columnsPerFrame = 64;
+    [Tooltip("协程每帧最多处理的像素行/列数")]
+    public int samplesPerFrame = 64;
 
     // ─────────────────────────────────────────────────
     //  公开事件
     // ─────────────────────────────────────────────────
 
-    /// <summary>波形纹理生成完毕时触发</summary>
     public event Action OnRenderComplete;
 
     // ─────────────────────────────────────────────────
@@ -57,7 +59,6 @@ public class WaveformRenderer : MonoBehaviour
     private Texture2D _texture;
     private Coroutine _renderCoroutine;
 
-    // 当前正在渲染的 clip 与时间范围（供外部查询）
     public AudioClip CurrentClip { get; private set; }
     public float CurrentStartSec { get; private set; }
     public float CurrentEndSec { get; private set; }
@@ -73,58 +74,38 @@ public class WaveformRenderer : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (_texture != null)
-            Destroy(_texture);
+        if (_texture != null) Destroy(_texture);
     }
 
     // ─────────────────────────────────────────────────
     //  公开 API
     // ─────────────────────────────────────────────────
 
-    /// <summary>
-    /// 渲染整个 AudioClip 的全局波形。
-    /// </summary>
+    /// <summary>渲染整首歌的全局波形。</summary>
     public void RenderFull(AudioClip clip)
     {
-        if (clip == null)
-        {
-            Debug.LogWarning("[WaveformRenderer] clip 为空，跳过渲染");
-            return;
-        }
+        if (clip == null) { Debug.LogWarning("[WaveformRenderer] clip 为空"); return; }
         RenderRange(clip, 0f, clip.length);
     }
 
-    /// <summary>
-    /// 渲染指定时间范围（秒）内的波形，可用于时间轴缩放/滚动。
-    /// </summary>
-    /// <param name="clip">音频资源</param>
-    /// <param name="startSec">起始时间（秒）</param>
-    /// <param name="endSec">结束时间（秒）</param>
+    /// <summary>渲染指定时间范围（秒）内的波形，可用于局部缩放显示。</summary>
     public void RenderRange(AudioClip clip, float startSec, float endSec)
     {
-        if (clip == null)
-        {
-            Debug.LogWarning("[WaveformRenderer] clip 为空，跳过渲染");
-            return;
-        }
-
+        if (clip == null) { Debug.LogWarning("[WaveformRenderer] clip 为空"); return; }
         CurrentClip = clip;
         CurrentStartSec = Mathf.Max(0f, startSec);
         CurrentEndSec = Mathf.Min(clip.length, endSec);
 
-        if (_renderCoroutine != null)
-            StopCoroutine(_renderCoroutine);
-
+        if (_renderCoroutine != null) StopCoroutine(_renderCoroutine);
         _renderCoroutine = StartCoroutine(RenderCoroutine(clip, CurrentStartSec, CurrentEndSec));
     }
 
     // ─────────────────────────────────────────────────
-    //  内部渲染协程
+    //  渲染协程
     // ─────────────────────────────────────────────────
 
     private IEnumerator RenderCoroutine(AudioClip clip, float startSec, float endSec)
     {
-        // 1. 读取所有 PCM 数据（交错多声道：sample[i*channels + ch]）
         int totalSamples = clip.samples;
         int channels = clip.channels;
         int sampleRate = clip.frequency;
@@ -136,39 +117,57 @@ public class WaveformRenderer : MonoBehaviour
         int endSample = Mathf.Clamp(Mathf.RoundToInt(endSec * sampleRate), startSample + 1, totalSamples);
         int rangeSamples = endSample - startSample;
 
-        // 2. 创建（或复用）纹理
-        if (_texture == null || _texture.width != textureWidth || _texture.height != textureHeight)
+        // 确定纹理尺寸
+        int texW, texH;
+        if (vertical)
+        {
+            texW = amplitudeAxisResolution;
+            texH = Mathf.Min(maxTimeAxisResolution, rangeSamples); // 高度 = 时间轴
+        }
+        else
+        {
+            texW = Mathf.Min(maxTimeAxisResolution, rangeSamples);
+            texH = amplitudeAxisResolution;
+        }
+        texW = Mathf.Max(1, texW);
+        texH = Mathf.Max(1, texH);
+
+        if (_texture == null || _texture.width != texW || _texture.height != texH)
         {
             if (_texture != null) Destroy(_texture);
-            _texture = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false)
+            _texture = new Texture2D(texW, texH, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
             };
         }
 
-        Color[] pixels = new Color[textureWidth * textureHeight];
+        Color[] pixels = new Color[texW * texH];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = backgroundColor;
 
-        // 3. 背景填充
-        for (int i = 0; i < pixels.Length; i++)
-            pixels[i] = backgroundColor;
-
-        // 4. 中轴参考线
-        int midY = textureHeight / 2;
-        for (int x = 0; x < textureWidth; x++)
-            pixels[midY * textureWidth + x] = centerLineColor;
-
-        // 5. 逐列绘制振幅柱（分帧执行）
-        int frameCount = 0;
-        for (int x = 0; x < textureWidth; x++)
+        // 绘制中心线
+        if (vertical)
         {
-            // 当前列对应的样本区间
-            int sStart = startSample + (int)((long)x * rangeSamples / textureWidth);
-            int sEnd = startSample + (int)((long)(x + 1) * rangeSamples / textureWidth);
+            int midX = texW / 2;
+            for (int y = 0; y < texH; y++) pixels[y * texW + midX] = centerLineColor;
+        }
+        else
+        {
+            int midY = texH / 2;
+            for (int x = 0; x < texW; x++) pixels[midY * texW + x] = centerLineColor;
+        }
+
+        // 采样维度（沿时间轴的步数）
+        int steps = vertical ? texH : texW;
+        int frameCount = 0;
+
+        for (int i = 0; i < steps; i++)
+        {
+            int sStart = startSample + (int)((long)i * rangeSamples / steps);
+            int sEnd = startSample + (int)((long)(i + 1) * rangeSamples / steps);
             sEnd = Mathf.Min(sEnd, endSample);
             if (sEnd <= sStart) sEnd = sStart + 1;
 
-            // 取区间内峰值振幅（各声道平均后取最大）
             float maxAmp = 0f;
             for (int s = sStart; s < sEnd && s < totalSamples; s++)
             {
@@ -179,31 +178,45 @@ public class WaveformRenderer : MonoBehaviour
                 if (avg > maxAmp) maxAmp = avg;
             }
 
-            // 柱高度（以中轴为中心向上下延伸）
-            int halfH = Mathf.RoundToInt(maxAmp * midY);
-            Color col = (maxAmp >= peakThreshold) ? peakColor : waveformColor;
+            Color col = maxAmp >= peakThreshold ? peakColor : waveformColor;
 
-            int yMin = Mathf.Max(0, midY - halfH);
-            int yMax = Mathf.Min(textureHeight - 1, midY + halfH);
-            for (int y = yMin; y <= yMax; y++)
-                pixels[y * textureWidth + x] = col;
+            if (vertical)
+            {
+                // i = 纹理行（y），X 轴为振幅
+                int midX = texW / 2;
+                int halfW = Mathf.RoundToInt(maxAmp * midX);
+                int xMin = Mathf.Max(0, midX - halfW);
+                int xMax = Mathf.Min(texW - 1, midX + halfW);
+                int y = i;
+                for (int x = xMin; x <= xMax; x++)
+                    pixels[y * texW + x] = col;
+            }
+            else
+            {
+                // i = 纹理列（x），Y 轴为振幅
+                int midY = texH / 2;
+                int halfH = Mathf.RoundToInt(maxAmp * midY);
+                int yMin = Mathf.Max(0, midY - halfH);
+                int yMax = Mathf.Min(texH - 1, midY + halfH);
+                int x = i;
+                for (int y = yMin; y <= yMax; y++)
+                    pixels[y * texW + x] = col;
+            }
 
-            // 每处理 columnsPerFrame 列就让出一帧
             frameCount++;
-            if (frameCount >= columnsPerFrame)
+            if (frameCount >= samplesPerFrame)
             {
                 frameCount = 0;
                 yield return null;
             }
         }
 
-        // 6. 提交纹理
         _texture.SetPixels(pixels);
         _texture.Apply();
         _rawImage.texture = _texture;
 
         _renderCoroutine = null;
         OnRenderComplete?.Invoke();
-        Debug.Log($"[WaveformRenderer] 波形渲染完成: {clip.name} [{startSec:F2}s ~ {endSec:F2}s]");
+        Debug.Log($"[WaveformRenderer] 渲染完成: {clip.name} [{startSec:F2}s ~ {endSec:F2}s] ({texW}×{texH})");
     }
 }
