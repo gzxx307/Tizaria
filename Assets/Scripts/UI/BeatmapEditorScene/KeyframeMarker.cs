@@ -1,4 +1,5 @@
 using UnityEngine;
+using TMPro;
 using UnityEngine.UI;
 
 /// <summary>
@@ -14,13 +15,13 @@ public class KeyframeMarker : MonoBehaviour
     [HideInInspector] public float Value;
 
     private Button _button;
-    private Text _label;
+    private TextMeshProUGUI _label;
 
     private void Awake()
     {
         _button = GetComponent<Button>();
         _button.onClick.AddListener(OnClick);
-        _label = GetComponentInChildren<Text>(true);
+        _label = GetComponentInChildren<TextMeshProUGUI>(true);
     }
 
     /// <summary>

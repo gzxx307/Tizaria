@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
+using TMPro;
 using UnityEngine.UI;
 
 /// <summary>
@@ -35,39 +36,56 @@ public class BeatmapEditorController : MonoBehaviour
     private GameObject _markerTemplate;
 
     // ─────────────────────────────────────────────────
-    //  UI 引用
+    //  UI 引用（在 Inspector 中手动绑定）
     // ─────────────────────────────────────────────────
 
-    // Top
-    private Button _exitBtn, _saveBtn, _saveAsBtn, _playBtn, _stopBtn;
-    private Text _bpmDisplay, _timeDisplay;
+    [Header("Top — 工具栏")]
+    [SerializeField] private Button _exitBtn;
+    [SerializeField] private Button _saveBtn;
+    [SerializeField] private Button _saveAsBtn;
+    [SerializeField] private Button _playBtn;
+    [SerializeField] private Button _stopBtn;
+    [SerializeField] private TextMeshProUGUI _bpmDisplay;
+    [SerializeField] private TextMeshProUGUI _timeDisplay;
 
-    // Left
-    private Button _undoBtn, _redoBtn;
-    private Toggle _snapToggle;
-    private Text _snapStateText;
-    private Button _beatDivBtn, _beatDivUp, _beatDivDown;
-    private Text _beatDivLabel;
-    private Button _bpmBtn, _svBtn;
-    private InputField _bpmInput, _svInput;
-    private InputField _diffDescInput, _diffValInput, _colCountInput;
-    private Button _changeDiffBtn, _newDiffBtn;
+    [Header("Left — 编辑操作")]
+    [SerializeField] private Button _undoBtn;
+    [SerializeField] private Button _redoBtn;
+    [SerializeField] private Button _snapToggle;
+    [SerializeField] private TextMeshProUGUI _snapStateText;
+    [SerializeField] private Button _beatDivBtn;
+    [SerializeField] private TextMeshProUGUI _beatDivDown;
+    [SerializeField] private Button _bpmBtn;
+    [SerializeField] private Button _svBtn;
+    [SerializeField] private TMP_InputField _bpmInput;
+    [SerializeField] private TMP_InputField _svInput;
+    [SerializeField] private TMP_InputField _diffDescInput;
+    [SerializeField] private TMP_InputField _diffValInput;
+    [SerializeField] private TMP_InputField _colCountInput;
+    [SerializeField] private Button _changeDiffBtn;
+    [SerializeField] private Button _newDiffBtn;
 
-    // Right
-    private InputField _titleInput, _artistInput, _mapWriterInput;
-    private InputField _illustratorInput, _descInput;
-    private Button _selectAudioBtn, _selectCoverBtn;
-    private InputField _previewStartInput, _initialBpmInput;
+    [Header("Right — 谱面集元数据")]
+    [SerializeField] private TMP_InputField _titleInput;
+    [SerializeField] private TMP_InputField _artistInput;
+    [SerializeField] private TMP_InputField _mapWriterInput;
+    [SerializeField] private TMP_InputField _illustratorInput;
+    [SerializeField] private TMP_InputField _descInput;
+    [SerializeField] private Button _selectAudioBtn;
+    [SerializeField] private Button _selectCoverBtn;
+    [SerializeField] private TMP_InputField _previewStartInput;
+    [SerializeField] private TMP_InputField _initialBpmInput;
 
-    // Center
-    private ScrollRect _scrollRect;
-    private RectTransform _contentRT;
-    private TimeRulerRenderer _timeRulerRenderer;
-    private WaveformRenderer _waveformRenderer;
-    private BpmCurveRenderer _bpmCurveRenderer;
-    private SvCurveRenderer _svCurveRenderer;
-    private BeatGridRenderer _beatGridRenderer;
-    private RectTransform _bpmKFContainer, _svKFContainer;
+    [Header("Center — 时间轴")]
+    [SerializeField] private ScrollRect _scrollRect;
+    [SerializeField] private RectTransform _contentRT;
+    [SerializeField] private TimeRulerRenderer _timeRulerRenderer;
+    [SerializeField] private WaveformRenderer _waveformRenderer;
+    [SerializeField] private BpmCurveRenderer _bpmCurveRenderer;
+    [SerializeField] private SvCurveRenderer _svCurveRenderer;
+    [SerializeField] private BeatGridRenderer _beatGridRenderer;
+    [SerializeField] private RectTransform _bpmKFContainer;
+    [SerializeField] private RectTransform _svKFContainer;
 
     // ─────────────────────────────────────────────────
     //  生命周期
@@ -79,15 +97,23 @@ public class BeatmapEditorController : MonoBehaviour
         if (_audio == null) _audio = gameObject.AddComponent<AudioSource>();
         _audio.playOnAwake = false;
 
-        FindUIReferences();
         WireListeners();
     }
 
     private void Start()
     {
         BuildMarkerTemplate();
-        UpdateBeatDivLabel();
+        if (_beatDivDown != null) _beatDivDown.text = _beatDivision.ToString();
         UpdateSnapStateText();
+
+        // 手动滚动时同步 _currentTimeMs
+        if (_scrollRect != null)
+            _scrollRect.onValueChanged.AddListener(_ =>
+            {
+                if (!_isPlaying)
+                    _currentTimeMs = ViewCenterTimeMs();
+            });
+
         RefreshFromManager();
     }
 
@@ -96,65 +122,6 @@ public class BeatmapEditorController : MonoBehaviour
         if (_isPlaying) TickPlayback();
         UpdateDisplays();
         HandleZoomScroll();
-    }
-
-    // ─────────────────────────────────────────────────
-    //  查找 UI 引用
-    // ─────────────────────────────────────────────────
-
-    private void FindUIReferences()
-    {
-        var canvas = FindObjectOfType<Canvas>().transform;
-
-        // Top
-        _exitBtn        = FindComp<Button>(canvas, "Top/ExitButton");
-        _saveBtn        = FindComp<Button>(canvas, "Top/SaveButton");
-        _saveAsBtn      = FindComp<Button>(canvas, "Top/SaveAsButton");
-        _playBtn        = FindComp<Button>(canvas, "Top/PlayButton");
-        _stopBtn        = FindComp<Button>(canvas, "Top/StopButton");
-        _bpmDisplay     = FindComp<Text>(canvas, "Top/BPMDisplay");
-        _timeDisplay    = FindComp<Text>(canvas, "Top/TimeDisplay");
-
-        // Left
-        _undoBtn        = FindComp<Button>(canvas, "Left/UndoButton");
-        _redoBtn        = FindComp<Button>(canvas, "Left/RedoButton");
-        _snapToggle     = FindComp<Toggle>(canvas, "Left/SnapToggle");
-        _snapStateText  = FindComp<Text>(canvas, "Left/SnapToggle/SnapToggleStateText");
-        _beatDivBtn     = FindComp<Button>(canvas, "Left/BeatDivisionButton");
-        _beatDivUp      = FindComp<Button>(canvas, "Left/BeatDivisionButton/BeatDivisionButtonUp");
-        _beatDivDown    = FindComp<Button>(canvas, "Left/BeatDivisionButton/BeatDivisionButtonDown");
-        _beatDivLabel   = FindComp<Text>(canvas, "Left/BeatDivisionButton/BeatDivisionButtonDivide");
-        _bpmBtn         = FindComp<Button>(canvas, "Left/BPMButton");
-        _svBtn          = FindComp<Button>(canvas, "Left/SVButton");
-        _bpmInput       = FindComp<InputField>(canvas, "Left/BPMButton/BPMInput");
-        _svInput        = FindComp<InputField>(canvas, "Left/SVButton/SVInput");
-        _diffDescInput  = FindComp<InputField>(canvas, "Left/DifficultyDescriptionInput");
-        _diffValInput   = FindComp<InputField>(canvas, "Left/DifficultyInput");
-        _colCountInput  = FindComp<InputField>(canvas, "Left/ColumnCountInput");
-        _changeDiffBtn  = FindComp<Button>(canvas, "Left/ChangeDifficultyButton");
-        _newDiffBtn     = FindComp<Button>(canvas, "Left/NewDifficultyButton");
-
-        // Right
-        _titleInput       = FindComp<InputField>(canvas, "Right/TitleInput");
-        _artistInput      = FindComp<InputField>(canvas, "Right/ArtistInput");
-        _mapWriterInput   = FindComp<InputField>(canvas, "Right/MapWriterInput");
-        _illustratorInput = FindComp<InputField>(canvas, "Right/IllustratorInput");
-        _descInput        = FindComp<InputField>(canvas, "Right/DescriptionInput");
-        _selectAudioBtn   = FindComp<Button>(canvas, "Right/SelectAudioButton");
-        _selectCoverBtn   = FindComp<Button>(canvas, "Right/CoverAudioButton");
-        _previewStartInput = FindComp<InputField>(canvas, "Right/PreviewStartInput");
-        _initialBpmInput  = FindComp<InputField>(canvas, "Right/InitialBPMInput");
-
-        // Center
-        _scrollRect        = FindComp<ScrollRect>(canvas, "Center/MainScrollView");
-        _contentRT         = FindComp<RectTransform>(canvas, "Center/MainScrollView/Viewport/Content");
-        _timeRulerRenderer = FindComp<TimeRulerRenderer>(canvas, "Center/MainScrollView/Viewport/Content/TimeRulerView");
-        _waveformRenderer  = FindComp<WaveformRenderer>(canvas, "Center/MainScrollView/Viewport/Content/WaveformView");
-        _bpmCurveRenderer  = FindComp<BpmCurveRenderer>(canvas, "Center/MainScrollView/Viewport/Content/BpmCurvePanel/BpmCurveView");
-        _svCurveRenderer   = FindComp<SvCurveRenderer>(canvas, "Center/MainScrollView/Viewport/Content/SvCurvePanel/SvCurveView");
-        _beatGridRenderer  = FindComp<BeatGridRenderer>(canvas, "Center/MainScrollView/Viewport/Content/NoteGridPanel/BeatGridView");
-        _bpmKFContainer    = FindComp<RectTransform>(canvas, "Center/MainScrollView/Viewport/Content/BpmCurvePanel/BpmKeyframeContainer");
-        _svKFContainer     = FindComp<RectTransform>(canvas, "Center/MainScrollView/Viewport/Content/SvCurvePanel/SvKeyframeContainer");
     }
 
     // ─────────────────────────────────────────────────
@@ -173,20 +140,17 @@ public class BeatmapEditorController : MonoBehaviour
         // Left – 操作
         Click(_undoBtn, OnUndo);
         Click(_redoBtn, OnRedo);
-        Click(_beatDivBtn,  () => AdjustBeatDivision(+1));
-        Click(_beatDivUp,   () => AdjustBeatDivision(+1));
-        Click(_beatDivDown, () => AdjustBeatDivision(-1));
+        Click(_beatDivBtn, CycleBeatDivision);
         Click(_bpmBtn, OnAddBpmKeyframe);
         Click(_svBtn,  OnAddSvKeyframe);
         Click(_changeDiffBtn, OnChangeDifficulty);
         Click(_newDiffBtn,    OnNewDifficulty);
 
-        if (_snapToggle != null)
-            _snapToggle.onValueChanged.AddListener(v =>
-            {
-                _snapEnabled = v;
-                UpdateSnapStateText();
-            });
+        Click(_snapToggle, () =>
+        {
+            _snapEnabled = !_snapEnabled;
+            UpdateSnapStateText();
+        });
 
         // Left – 难度字段（失焦时应用）
         EndEdit(_diffDescInput, v => Do(
@@ -288,10 +252,6 @@ public class BeatmapEditorController : MonoBehaviour
             _bpmDisplay.text = $"{GetBpmAt(_currentTimeMs):F1} BPM";
     }
 
-    private void UpdateBeatDivLabel()
-    {
-        if (_beatDivLabel != null) _beatDivLabel.text = $"1/{_beatDivision}";
-    }
 
     private void UpdateSnapStateText()
     {
@@ -490,10 +450,10 @@ public class BeatmapEditorController : MonoBehaviour
     //  节拍细分
     // ─────────────────────────────────────────────────
 
-    private void AdjustBeatDivision(int delta)
+    private void CycleBeatDivision()
     {
-        _beatDivision = Mathf.Clamp(_beatDivision + delta, 1, 16);
-        UpdateBeatDivLabel();
+        _beatDivision = _beatDivision % 16 + 1;
+        if (_beatDivDown != null) _beatDivDown.text = _beatDivision.ToString();
         if (_beatGridRenderer != null)
         {
             _beatGridRenderer.beatDivision = _beatDivision;
@@ -540,8 +500,8 @@ public class BeatmapEditorController : MonoBehaviour
         float maxScroll = Mathf.Max(0f, contentH - viewportH);
         if (maxScroll <= 0f) return;
 
-        // Playhead 在视口底部 30% 处（从底部算）
-        float targetY = timeMs * _pixelsPerMs - viewportH * 0.3f;
+        // Playhead 在视口底部 30% 处（从底部算）= 从顶部 70% 处
+        float targetY = timeMs * _pixelsPerMs - viewportH * 0.7f;
         float norm = 1f - Mathf.Clamp01(targetY / maxScroll);
         _scrollRect.verticalNormalizedPosition = norm;
     }
@@ -722,12 +682,11 @@ public class BeatmapEditorController : MonoBehaviour
         var lrt = label.GetComponent<RectTransform>();
         lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one;
         lrt.offsetMin = new Vector2(3f, 0f); lrt.offsetMax = Vector2.zero;
-        var txt = label.AddComponent<Text>();
+        var txt = label.AddComponent<TextMeshProUGUI>();
         txt.fontSize  = 11;
         txt.color     = Color.white;
-        txt.alignment = TextAnchor.MiddleLeft;
+        txt.alignment = TextAlignmentOptions.MidlineLeft;
         txt.raycastTarget = false;
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
     }
 
     private static void ClearChildren(RectTransform rt)
@@ -739,25 +698,17 @@ public class BeatmapEditorController : MonoBehaviour
 
     private static void SetBtnText(Button btn, string text)
     {
-        var t = btn?.GetComponentInChildren<Text>();
+        var t = btn?.GetComponentInChildren<TextMeshProUGUI>();
         if (t != null) t.text = text;
     }
 
-    private static T FindComp<T>(Transform root, string path) where T : Component
-    {
-        var t = root.Find(path);
-        if (t == null) { Debug.LogWarning($"[Editor] 路径未找到：{path}"); return null; }
-        var c = t.GetComponent<T>();
-        if (c == null) Debug.LogWarning($"[Editor] 组件 {typeof(T).Name} 未找到：{path}");
-        return c;
-    }
 
     private static void Click(Button btn, UnityEngine.Events.UnityAction cb)
         { if (btn != null) btn.onClick.AddListener(cb); }
 
-    private static void EndEdit(InputField field, UnityEngine.Events.UnityAction<string> cb)
+    private static void EndEdit(TMP_InputField field, UnityEngine.Events.UnityAction<string> cb)
         { if (field != null) field.onEndEdit.AddListener(cb); }
 
-    private static void SetField(InputField field, string value)
+    private static void SetField(TMP_InputField field, string value)
         { if (field != null) field.SetTextWithoutNotify(value ?? ""); }
 }
