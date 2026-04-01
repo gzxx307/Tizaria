@@ -1,6 +1,7 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
@@ -41,6 +42,9 @@ public class SongSelectManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI scoreText;
     [SerializeField] private TextMeshProUGUI accText;
     [SerializeField] private TextMeshProUGUI rankingText;
+    
+    [Header("Edit")]
+    [SerializeField] private Button editButton;
 
     // ─────────────────────────────────────────────────
     //  私有状态
@@ -62,6 +66,9 @@ public class SongSelectManager : MonoBehaviour
             leftNavButton.onNavigate.AddListener(NavigatePrev);
         if (rightNavButton != null)
             rightNavButton.onNavigate.AddListener(NavigateNext);
+        
+        if (editButton != null)
+            editButton.onClick.AddListener(() => SceneManager.LoadScene("BeatmapEditorScene"));
 
         RefreshPlayerPanel();
         RefreshCarousel();
