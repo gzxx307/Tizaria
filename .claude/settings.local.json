@@ -10,7 +10,8 @@
       "Bash(python:*)",
       "mcp__mcp-unity__recompile_scripts",
       "mcp__mcp-unity__update_component",
-      "mcp__mcp-unity__save_scene"
+      "mcp__mcp-unity__save_scene",
+      "mcp__mcp-unity__get_console_logs"
     ]
   }
 }

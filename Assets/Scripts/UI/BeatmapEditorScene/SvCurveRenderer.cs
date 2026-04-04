@@ -3,14 +3,15 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 将 SVTimePoint 列表渲染为竖向阶梯折线图，显示在 RawImage 上。
-/// Y 轴 = 时间（顶部 = time=0），X 轴 = SV 值（中心线 = SV 1.0）。
+/// 将 SVTimePoint 列表渲染为竖向线性折线图，显示在 RawImage 上。
+/// Y 轴 = 时间（底部 = time=0，顶部 = time=end），X 轴 = SV 值（中心线 = SV 1.0）。
+/// 相邻关键帧之间用直线连接（线性插值）。
 /// </summary>
 [RequireComponent(typeof(RawImage))]
 public class SvCurveRenderer : MonoBehaviour
 {
     [Header("纹理")]
-    public int textureWidth = 128;
+    public int textureWidth     = 128;
     public int maxTextureHeight = 4096;
 
     [Header("SV 显示范围")]
@@ -20,24 +21,19 @@ public class SvCurveRenderer : MonoBehaviour
     [Header("颜色")]
     public Color backgroundColor = new Color(0.07f, 0.07f, 0.10f, 1f);
     public Color centerLineColor = new Color(0.20f, 0.35f, 0.40f, 1f);
-    public Color curveColor = new Color(0.20f, 0.85f, 0.95f, 1f);
-    public Color transitionColor = new Color(0.70f, 0.95f, 1.00f, 1f);
+    public Color curveColor      = new Color(0.20f, 0.85f, 0.95f, 1f);
 
-    private RawImage _rawImage;
+    private RawImage  _rawImage;
     private Texture2D _texture;
 
-    private void Awake() => _rawImage = GetComponent<RawImage>();
+    private void Awake()     => _rawImage = GetComponent<RawImage>();
     private void OnDestroy() { if (_texture != null) Destroy(_texture); }
 
     // ─────────────────────────────────────────────────
     //  公开 API
     // ─────────────────────────────────────────────────
 
-    /// <summary>
-    /// 渲染 SV 曲线。SV=1.0 显示在中心线位置。
-    /// </summary>
-    /// <param name="points">SVTimePoint 列表（按时间升序）</param>
-    /// <param name="totalLengthMs">歌曲总时长（ms）</param>
+    /// <summary>渲染 SV 曲线（线性插值）。SV=1.0 显示在中心线位置。</summary>
     public void Render(List<SVTimePoint> points, int totalLengthMs)
     {
         if (points == null || totalLengthMs <= 0) return;
@@ -52,55 +48,42 @@ public class SvCurveRenderer : MonoBehaviour
         int centerX = textureWidth / 2;
         for (int y = 0; y < texH; y++) pixels[y * textureWidth + centerX] = centerLineColor;
 
+        float minSv = 1f - svDisplayHalfRange;
+        float maxSv = 1f + svDisplayHalfRange;
+
         if (points.Count == 0)
         {
-            // 没有 SV 关键帧：整段保持 SV=1.0，画中心线即可
+            // 没有关键帧：整段 SV=1.0，只画中心竖线即可
             _texture.SetPixels(pixels);
             _texture.Apply();
             _rawImage.texture = _texture;
             return;
         }
 
-        float minSv = 1f - svDisplayHalfRange;
-        float maxSv = 1f + svDisplayHalfRange;
+        // 第一个关键帧前：SV=1.0，从 y=0（底部）画到第一关键帧
+        int firstX = SvToX(1.0f, minSv, maxSv);
+        int firstY = TimeToY(points[0].Time, totalLengthMs, texH);
+        DrawLine(pixels, textureWidth, texH, firstX, 0, firstX, firstY, curveColor);
 
-        // 在第一个关键帧之前默认 SV=1.0
-        float prevSv = 1.0f;
-        int prevX = SvToX(prevSv, minSv, maxSv);
-        int prevEndY = points.Count > 0 ? TimeToY(points[0].Time, totalLengthMs, texH) : 0;
-
-        // 绘制 time=0 到第一个关键帧之间的段（SV=1.0）
-        for (int y = 0; y < prevEndY; y++)
-        {
-            int idx = y * textureWidth + prevX;
-            if (idx >= 0 && idx < pixels.Length) pixels[idx] = curveColor;
-        }
-
+        // 逐段线性插值
         for (int i = 0; i < points.Count; i++)
         {
-            int curX = SvToX(points[i].SV, minSv, maxSv);
-            int startY = TimeToY(points[i].Time, totalLengthMs, texH);
-            int endY = (i + 1 < points.Count)
-                ? TimeToY(points[i + 1].Time, totalLengthMs, texH)
-                : texH - 1;
+            int x0 = SvToX(points[i].SV, minSv, maxSv);
+            int y0 = TimeToY(points[i].Time, totalLengthMs, texH);
 
-            // 垂直过渡线
-            int lo = Mathf.Min(prevX, curX);
-            int hi = Mathf.Max(prevX, curX);
-            for (int x = lo; x <= hi; x++)
+            int x1, y1;
+            if (i + 1 < points.Count)
             {
-                int idx = startY * textureWidth + Mathf.Clamp(x, 0, textureWidth - 1);
-                if (idx >= 0 && idx < pixels.Length) pixels[idx] = transitionColor;
+                x1 = SvToX(points[i + 1].SV, minSv, maxSv);
+                y1 = TimeToY(points[i + 1].Time, totalLengthMs, texH);
+            }
+            else
+            {
+                x1 = x0;        // 最后段 SV 保持不变
+                y1 = texH - 1;
             }
 
-            // 水平线段
-            for (int y = startY; y <= Mathf.Min(endY, texH - 1); y++)
-            {
-                int idx = y * textureWidth + curX;
-                if (idx >= 0 && idx < pixels.Length) pixels[idx] = curveColor;
-            }
-
-            prevX = curX;
+            DrawLine(pixels, textureWidth, texH, x0, y0, x1, y1, curveColor);
         }
 
         _texture.SetPixels(pixels);
@@ -118,8 +101,28 @@ public class SvCurveRenderer : MonoBehaviour
         return Mathf.Clamp(Mathf.RoundToInt(t * (textureWidth - 3)) + 1, 0, textureWidth - 1);
     }
 
+    // time=0 → y=0（底部），time=end → y=texH-1（顶部）
     private int TimeToY(int timeMs, int totalLengthMs, int texH)
         => Mathf.Clamp(Mathf.RoundToInt((float)timeMs / totalLengthMs * texH), 0, texH - 1);
+
+    /// <summary>Bresenham 直线算法。</summary>
+    private void DrawLine(Color[] pixels, int texW, int texH,
+                          int x0, int y0, int x1, int y1, Color col)
+    {
+        int dx = Mathf.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+        int dy = Mathf.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+        int err = (dx > dy ? dx : -dy) / 2;
+        int limit = (texW + texH) * 2;
+        for (int iter = 0; iter < limit; iter++)
+        {
+            if (x0 >= 0 && x0 < texW && y0 >= 0 && y0 < texH)
+                pixels[y0 * texW + x0] = col;
+            if (x0 == x1 && y0 == y1) break;
+            int e2 = err;
+            if (e2 > -dx) { err -= dy; x0 += sx; }
+            if (e2 <  dy) { err += dx; y0 += sy; }
+        }
+    }
 
     private void RebuildTexture(int w, int h)
     {
@@ -128,7 +131,7 @@ public class SvCurveRenderer : MonoBehaviour
         _texture = new Texture2D(w, h, TextureFormat.RGBA32, false)
         {
             filterMode = FilterMode.Point,
-            wrapMode = TextureWrapMode.Clamp,
+            wrapMode   = TextureWrapMode.Clamp,
         };
     }
 }

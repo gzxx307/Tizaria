@@ -182,7 +182,7 @@ public class WaveformRenderer : MonoBehaviour
 
             if (vertical)
             {
-                // i = 纹理行（y），X 轴为振幅
+                // i=0 对应 time=start，应在纹理底部（y=0），向上增大
                 int midX = texW / 2;
                 int halfW = Mathf.RoundToInt(maxAmp * midX);
                 int xMin = Mathf.Max(0, midX - halfW);

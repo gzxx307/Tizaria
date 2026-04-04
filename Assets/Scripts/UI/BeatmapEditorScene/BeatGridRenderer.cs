@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -5,8 +6,9 @@ using UnityEngine.UI;
 /// <summary>
 /// 渲染音符网格背景：横向节拍线 + 纵向轨道分隔线。
 ///
-/// Y 轴 = 时间（顶部 = time=0，底部 = time=totalLength），
-/// X 轴 = 轨道列（均匀分布，0..columnCount-1）。
+/// Y 轴 = 时间（底部 = time=0，顶部 = time=totalLength）。
+/// 渲染顺序：细分线 → 拍线 → 小节线 → 列线（后绘制的更优先）。
+/// 使用 double 精度计算时间，避免浮点数累积误差。
 /// </summary>
 [RequireComponent(typeof(RawImage))]
 public class BeatGridRenderer : MonoBehaviour
@@ -15,32 +17,26 @@ public class BeatGridRenderer : MonoBehaviour
     public int maxTextureHeight = 4096;
 
     [Header("节拍分割")]
-    [Tooltip("每拍细分数，例如 4 = 1/4 音符显示节拍线")]
+    [Tooltip("每拍细分数，例如 4 = 1/4 音符，16 = 1/16 音符")]
     public int beatDivision = 4;
 
     [Header("颜色")]
     public Color backgroundColor = new Color(0.07f, 0.07f, 0.09f, 1f);
-    public Color measureLineColor = new Color(0.55f, 0.55f, 0.65f, 1f);   // 小节线（最亮）
-    public Color beatLineColor = new Color(0.30f, 0.30f, 0.38f, 1f);      // 拍线
-    public Color subBeatLineColor = new Color(0.14f, 0.14f, 0.18f, 1f);   // 细分线（最暗）
-    public Color columnLineColor = new Color(0.22f, 0.22f, 0.28f, 1f);    // 列分隔线
+    public Color measureLineColor = new Color(0.55f, 0.55f, 0.65f, 1f);
+    public Color beatLineColor    = new Color(0.30f, 0.30f, 0.38f, 1f);
+    public Color subBeatLineColor = new Color(0.14f, 0.14f, 0.18f, 1f);
+    public Color columnLineColor  = new Color(0.22f, 0.22f, 0.28f, 1f);
 
-    private RawImage _rawImage;
+    private RawImage  _rawImage;
     private Texture2D _texture;
 
-    private void Awake() => _rawImage = GetComponent<RawImage>();
+    private void Awake()     => _rawImage = GetComponent<RawImage>();
     private void OnDestroy() { if (_texture != null) Destroy(_texture); }
 
     // ─────────────────────────────────────────────────
     //  公开 API
     // ─────────────────────────────────────────────────
 
-    /// <summary>
-    /// 渲染节拍网格。
-    /// </summary>
-    /// <param name="bpmPoints">BPM 关键帧列表（按时间升序）</param>
-    /// <param name="totalLengthMs">歌曲总时长（ms）</param>
-    /// <param name="columnCount">轨道数</param>
     public void Render(List<BPMTimePoint> bpmPoints, int totalLengthMs, int columnCount)
     {
         if (bpmPoints == null || bpmPoints.Count == 0 || totalLengthMs <= 0 || columnCount < 1) return;
@@ -49,62 +45,70 @@ public class BeatGridRenderer : MonoBehaviour
         int texW = Mathf.Max(columnCount * 8, 64);
         int texH = Mathf.Clamp(totalLengthMs / 10, 64, maxTextureHeight);
 
+        // 纹理每像素对应的时间（ms）
+        double msPerPx = (double)totalLengthMs / texH;
+
         RebuildTexture(texW, texH);
 
         Color[] pixels = new Color[texW * texH];
         for (int i = 0; i < pixels.Length; i++) pixels[i] = backgroundColor;
 
-        // ── 纵向列分隔线 ──
-        for (int col = 1; col < columnCount; col++)
+        // ── 3 个 pass，优先级从低到高：细分线 → 拍线 → 小节线 ──
+        // 后 pass 会覆盖前 pass，确保更重要的线始终可见
+        for (int pass = 0; pass < 3; pass++)
         {
-            int x = Mathf.RoundToInt((float)col / columnCount * texW);
-            x = Mathf.Clamp(x, 0, texW - 1);
-            for (int y = 0; y < texH; y++)
-                pixels[y * texW + x] = columnLineColor;
+            for (int seg = 0; seg < bpmPoints.Count; seg++)
+            {
+                double bpm = bpmPoints[seg].BPM;
+                if (bpm <= 0) continue;
+
+                int    num       = Mathf.Max(1, bpmPoints[seg].Numerator);
+                int    segStart  = bpmPoints[seg].Time;
+                int    segEnd    = (seg + 1 < bpmPoints.Count) ? bpmPoints[seg + 1].Time : totalLengthMs;
+
+                double mspb = 60000.0 / bpm;            // ms per beat
+                double msps = mspb / beatDivision;      // ms per subdivision
+
+                // 当前 pass 是否需要绘制（间距太小则跳过）
+                bool doSubBeat = (pass == 0) && (msps / msPerPx >= 2.0);
+                bool doBeat    = (pass == 1) && (mspb / msPerPx >= 1.5);
+                bool doMeasure = (pass == 2);
+                if (!doSubBeat && !doBeat && !doMeasure) continue;
+
+                int subdivIdx = 0;
+                while (true)
+                {
+                    // 用 double 乘法，避免累积浮点误差
+                    double subT = segStart + subdivIdx * msps;
+                    if (subT >= segEnd - 0.01) break;
+
+                    bool isMeasure = (subdivIdx % (num * beatDivision) == 0);
+                    bool isBeat    = (subdivIdx % beatDivision == 0);
+
+                    int y = TimeToY((int)Math.Round(subT), totalLengthMs, texH);
+
+                    if (pass == 0 && !isBeat && doSubBeat)
+                        DrawHLine(pixels, texW, texH, y, subBeatLineColor);
+                    else if (pass == 1 && isBeat && !isMeasure && doBeat)
+                        DrawHLine(pixels, texW, texH, y, beatLineColor);
+                    else if (pass == 2 && isMeasure)
+                        DrawHLine(pixels, texW, texH, y, measureLineColor);
+
+                    subdivIdx++;
+                }
+            }
         }
 
-        // ── 横向节拍线 ──
-        for (int seg = 0; seg < bpmPoints.Count; seg++)
+        // ── 列分隔线（最后绘制，始终可见）──
+        for (int col = 0; col <= columnCount; col++)
         {
-            float bpm = bpmPoints[seg].BPM;
-            int num = Mathf.Max(1, bpmPoints[seg].Numerator);
-            int segStartMs = bpmPoints[seg].Time;
-            int segEndMs = (seg + 1 < bpmPoints.Count) ? bpmPoints[seg + 1].Time : totalLengthMs;
+            int x;
+            if (col == 0)             x = 0;
+            else if (col == columnCount) x = texW - 1;
+            else x = Mathf.Clamp(Mathf.RoundToInt((float)col / columnCount * texW), 0, texW - 1);
 
-            if (bpm <= 0f) continue;
-
-            // 每拍时长（ms）及细分时长
-            float mspb = 60000f / bpm;             // ms per beat
-            float msps = mspb / beatDivision;      // ms per subdivision
-
-            float t = segStartMs;
-            int beatInMeasure = 0;
-
-            while (t < segEndMs - 0.1f)
-            {
-                int y = TimeToY((int)t, totalLengthMs, texH);
-
-                bool isMeasure = (beatInMeasure % num == 0);
-                bool isBeat = (beatInMeasure % 1 == 0); // always true here, used for subdivision loop
-
-                // 每个拍内部的细分线
-                for (int sub = 0; sub < beatDivision; sub++)
-                {
-                    float subT = t + sub * msps;
-                    if (subT >= segEndMs) break;
-                    int sy = TimeToY((int)subT, totalLengthMs, texH);
-
-                    Color lineCol;
-                    if (sub == 0 && isMeasure) lineCol = measureLineColor;
-                    else if (sub == 0) lineCol = beatLineColor;
-                    else lineCol = subBeatLineColor;
-
-                    DrawHLine(pixels, texW, texH, sy, lineCol);
-                }
-
-                t += mspb;
-                beatInMeasure++;
-            }
+            for (int y = 0; y < texH; y++)
+                pixels[y * texW + x] = columnLineColor;
         }
 
         _texture.SetPixels(pixels);
@@ -124,6 +128,7 @@ public class BeatGridRenderer : MonoBehaviour
             pixels[offset + x] = col;
     }
 
+    // time=0 → y=0（底部），time=end → y=texH-1（顶部）
     private int TimeToY(int timeMs, int totalLengthMs, int texH)
         => Mathf.Clamp(Mathf.RoundToInt((float)timeMs / totalLengthMs * texH), 0, texH - 1);
 
@@ -134,7 +139,7 @@ public class BeatGridRenderer : MonoBehaviour
         _texture = new Texture2D(w, h, TextureFormat.RGBA32, false)
         {
             filterMode = FilterMode.Point,
-            wrapMode = TextureWrapMode.Clamp,
+            wrapMode   = TextureWrapMode.Clamp,
         };
     }
 }

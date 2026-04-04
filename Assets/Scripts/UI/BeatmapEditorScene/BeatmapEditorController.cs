@@ -86,6 +86,10 @@ public class BeatmapEditorController : MonoBehaviour
     [SerializeField] private BeatGridRenderer _beatGridRenderer;
     [SerializeField] private RectTransform _bpmKFContainer;
     [SerializeField] private RectTransform _svKFContainer;
+    [SerializeField] private NoteGridInteraction _noteGridInteraction;
+
+    // Content HLG（可自动查找）
+    private HorizontalLayoutGroup _contentHLG;
 
     // ─────────────────────────────────────────────────
     //  生命周期
@@ -114,7 +118,20 @@ public class BeatmapEditorController : MonoBehaviour
                     _currentTimeMs = ViewCenterTimeMs();
             });
 
+        // 自动查找 Content 上的 HLG
+        if (_contentRT != null)
+            _contentHLG = _contentRT.GetComponent<HorizontalLayoutGroup>();
+
         RefreshFromManager();
+
+        // 等一帧让 Canvas 完成布局，再滚动到起点
+        StartCoroutine(CoScrollToStart());
+    }
+
+    private System.Collections.IEnumerator CoScrollToStart()
+    {
+        yield return null;
+        ScrollToTime(0);
     }
 
     private void Update()
@@ -489,32 +506,31 @@ public class BeatmapEditorController : MonoBehaviour
         ScrollToTime(pivot);
     }
 
-    /// <summary>滚动时间轴使 timeMs 对准 Playhead（视口 30% 高度处）。</summary>
+    /// <summary>
+    /// 滚动时间轴使 timeMs 对准 Playhead。
+    /// Content 高度 = audioH + viewportH，HLG 底部留 30% viewport 作为 padding，
+    /// 因此 norm = timeMs / audioMs 恰好让 Playhead 对准目标时间。
+    /// </summary>
     public void ScrollToTime(int timeMs)
     {
         if (_scrollRect == null || _contentRT == null) return;
-
         Canvas.ForceUpdateCanvases();
-        float contentH  = _contentRT.rect.height;
-        float viewportH = _scrollRect.viewport.rect.height;
-        float maxScroll = Mathf.Max(0f, contentH - viewportH);
+
+        int audioMs = TotalLengthMs();
+        if (audioMs <= 0) return;
+
+        float maxScroll = Mathf.Max(0f, _contentRT.rect.height - _scrollRect.viewport.rect.height);
         if (maxScroll <= 0f) return;
 
-        // Playhead 在视口底部 30% 处（从底部算）= 从顶部 70% 处
-        float targetY = timeMs * _pixelsPerMs - viewportH * 0.7f;
-        float norm = 1f - Mathf.Clamp01(targetY / maxScroll);
-        _scrollRect.verticalNormalizedPosition = norm;
+        _scrollRect.verticalNormalizedPosition = Mathf.Clamp01((float)timeMs / audioMs);
     }
 
-    /// <summary>返回当前视口中央对应的时间（ms）。</summary>
+    /// <summary>返回当前滚动位置对应的时间（ms）。</summary>
     private int ViewCenterTimeMs()
     {
-        if (_scrollRect == null || _contentRT == null) return _currentTimeMs;
-        float contentH  = _contentRT.rect.height;
-        float viewportH = _scrollRect.viewport.rect.height;
-        float maxScroll = Mathf.Max(0f, contentH - viewportH);
-        float scrollY   = (1f - _scrollRect.verticalNormalizedPosition) * maxScroll;
-        return Mathf.RoundToInt((scrollY + viewportH * 0.5f) / _pixelsPerMs);
+        float norm    = _scrollRect?.verticalNormalizedPosition ?? 0f;
+        int   audioMs = TotalLengthMs();
+        return Mathf.Clamp(Mathf.RoundToInt(norm * audioMs), 0, audioMs);
     }
 
     // ─────────────────────────────────────────────────
@@ -534,13 +550,55 @@ public class BeatmapEditorController : MonoBehaviour
         UpdateContentHeight();
         RefreshRenderers();
         RefreshKeyframeMarkers();
+        _noteGridInteraction?.RefreshNotes();
     }
 
     private void UpdateContentHeight()
     {
         if (_contentRT == null) return;
-        float h = Mathf.Max(TotalLengthMs() * _pixelsPerMs, 500f);
-        _contentRT.sizeDelta = new Vector2(0f, h);
+        Canvas.ForceUpdateCanvases();
+
+        float viewportH = _scrollRect?.viewport.rect.height ?? 600f;
+        float audioH    = Mathf.Max(TotalLengthMs() * _pixelsPerMs, 100f);
+
+        // Content = 音频高度 + 一个视口高度（底部 30% 为判定线留白，顶部 70%）
+        float contentH = audioH + viewportH;
+        _contentRT.sizeDelta = new Vector2(0f, contentH);
+
+        // HLG: 将子条目（各 Strip）对齐到底部并留出 padding，
+        // 使 time=0 精确落在判定线（视口 30% 处）
+        if (_contentHLG == null && _contentRT != null)
+            _contentHLG = _contentRT.GetComponent<HorizontalLayoutGroup>();
+        if (_contentHLG != null)
+        {
+            _contentHLG.childAlignment = TextAnchor.LowerLeft;
+            _contentHLG.padding = new RectOffset(
+                _contentHLG.padding.left,
+                _contentHLG.padding.right,
+                Mathf.RoundToInt(viewportH * 0.7f),  // 顶部留白（70%）
+                Mathf.RoundToInt(viewportH * 0.3f)   // 底部留白（30%）
+            );
+        }
+
+        // 各 Strip 高度 = 音频高度（HLG padding 负责定位）
+        float stripH = audioH;
+        SetStripHeight(_timeRulerRenderer, stripH);
+        SetStripHeight(_waveformRenderer,  stripH);
+        SetStripHeight(_bpmCurveRenderer?.transform.parent, stripH);
+        SetStripHeight(_svCurveRenderer?.transform.parent,  stripH);
+        SetStripHeight(_beatGridRenderer?.transform.parent, stripH);
+    }
+
+    private static void SetStripHeight(Component c, float h)
+    {
+        var rt = c?.GetComponent<RectTransform>();
+        if (rt != null) rt.sizeDelta = new Vector2(rt.sizeDelta.x, h);
+    }
+
+    private static void SetStripHeight(Transform t, float h)
+    {
+        var rt = t?.GetComponent<RectTransform>();
+        if (rt != null) rt.sizeDelta = new Vector2(rt.sizeDelta.x, h);
     }
 
     private void RefreshRenderers()
@@ -548,7 +606,7 @@ public class BeatmapEditorController : MonoBehaviour
         var m = BeatmapEditorManager.Instance;
         int totalMs = TotalLengthMs();
 
-        _timeRulerRenderer?.Render(totalMs);
+_timeRulerRenderer?.Render(totalMs);
 
         if (m?.CurrentSet?.AudioClip != null)
             _waveformRenderer?.RenderFull(m.CurrentSet.AudioClip);
@@ -585,11 +643,12 @@ public class BeatmapEditorController : MonoBehaviour
 
         var go = Instantiate(_markerTemplate, container);
         var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 1f);
-        rt.anchorMax = new Vector2(1f, 1f);
+        // 新坐标系：锚点在底部，向上偏移（time=0 在底部）
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
         rt.pivot     = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(0f, 20f);
-        rt.anchoredPosition = new Vector2(0f, -(timeMs * _pixelsPerMs));
+        rt.anchoredPosition = new Vector2(0f, timeMs * _pixelsPerMs);
 
         var marker = go.GetComponent<KeyframeMarker>();
         marker.Init(type, timeMs, value);
@@ -635,7 +694,9 @@ public class BeatmapEditorController : MonoBehaviour
     //  工具方法
     // ─────────────────────────────────────────────────
 
-    private int TotalLengthMs()
+    public float PixelsPerMs => _pixelsPerMs;
+
+    public int TotalLengthMs()
     {
         var set = BeatmapEditorManager.Instance?.CurrentSet;
         if (set?.AudioClip != null) return Mathf.RoundToInt(set.AudioClip.length * 1000f);

@@ -40,6 +40,22 @@ public class BeatmapEditorManager : MonoBehaviour
             return;
         }
         Instance = this;
+
+        var set = GameRoot.Instance?.SelectedBeatmapDataSet;
+        if (set != null)
+        {
+            // 打开 SongSelectScene 中选中的谱面集
+            CurrentSet = set;
+            CurrentMap = GameRoot.Instance.SelectedBeatmapData;
+            IsDirty    = false;
+            Debug.Log($"[BeatmapEditorManager] 打开谱面集: {set.Title}");
+        }
+        else
+        {
+            // 没有选中谱面，创建新的空白谱面集
+            NewSet("", "");
+            Debug.Log("[BeatmapEditorManager] 新建空白谱面集");
+        }
     }
 
     // ─────────────────────────────────────────────────
