@@ -32,9 +32,6 @@ public class BeatmapEditorController : MonoBehaviour
     private readonly Stack<(Action undo, Action redo)> _undoStack = new();
     private readonly Stack<(Action undo, Action redo)> _redoStack = new();
 
-    // 关键帧标记模板（运行时生成）
-    private GameObject _markerTemplate;
-
     // ─────────────────────────────────────────────────
     //  UI 引用（在 Inspector 中手动绑定）
     // ─────────────────────────────────────────────────
@@ -76,21 +73,6 @@ public class BeatmapEditorController : MonoBehaviour
     [SerializeField] private TMP_InputField _previewStartInput;
     [SerializeField] private TMP_InputField _initialBpmInput;
 
-    [Header("Center — 时间轴")]
-    [SerializeField] private ScrollRect _scrollRect;
-    [SerializeField] private RectTransform _contentRT;
-    [SerializeField] private TimeRulerRenderer _timeRulerRenderer;
-    [SerializeField] private WaveformRenderer _waveformRenderer;
-    [SerializeField] private BpmCurveRenderer _bpmCurveRenderer;
-    [SerializeField] private SvCurveRenderer _svCurveRenderer;
-    [SerializeField] private BeatGridRenderer _beatGridRenderer;
-    [SerializeField] private RectTransform _bpmKFContainer;
-    [SerializeField] private RectTransform _svKFContainer;
-    [SerializeField] private NoteGridInteraction _noteGridInteraction;
-
-    // Content HLG（可自动查找）
-    private HorizontalLayoutGroup _contentHLG;
-
     // ─────────────────────────────────────────────────
     //  生命周期
     // ─────────────────────────────────────────────────
@@ -104,41 +86,18 @@ public class BeatmapEditorController : MonoBehaviour
         WireListeners();
     }
 
+
     private void Start()
     {
-        BuildMarkerTemplate();
         if (_beatDivDown != null) _beatDivDown.text = _beatDivision.ToString();
         UpdateSnapStateText();
-
-        // 手动滚动时同步 _currentTimeMs
-        if (_scrollRect != null)
-            _scrollRect.onValueChanged.AddListener(_ =>
-            {
-                if (!_isPlaying)
-                    _currentTimeMs = ViewCenterTimeMs();
-            });
-
-        // 自动查找 Content 上的 HLG
-        if (_contentRT != null)
-            _contentHLG = _contentRT.GetComponent<HorizontalLayoutGroup>();
-
         RefreshFromManager();
-
-        // 等一帧让 Canvas 完成布局，再滚动到起点
-        StartCoroutine(CoScrollToStart());
-    }
-
-    private System.Collections.IEnumerator CoScrollToStart()
-    {
-        yield return null;
-        ScrollToTime(0);
     }
 
     private void Update()
     {
         if (_isPlaying) TickPlayback();
         UpdateDisplays();
-        HandleZoomScroll();
     }
 
     // ─────────────────────────────────────────────────
@@ -186,8 +145,8 @@ public class BeatmapEditorController : MonoBehaviour
         {
             if (!int.TryParse(v, out int c)) return;
             int old = BeatmapEditorManager.Instance?.CurrentMap?.ColumnCount ?? c;
-            Do(() => { BeatmapEditorManager.Instance?.SetColumnCount(c); RefreshAll(); },
-               () => { BeatmapEditorManager.Instance?.SetColumnCount(old); RefreshAll(); });
+            Do(() => { BeatmapEditorManager.Instance?.SetColumnCount(c); },
+               () => { BeatmapEditorManager.Instance?.SetColumnCount(old); });
         });
         EndEdit(_initialBpmInput, v =>
         {
@@ -246,14 +205,12 @@ public class BeatmapEditorController : MonoBehaviour
         _isPlaying = false;
         _currentTimeMs = _playStartTimeMs;
         SetBtnText(_playBtn, "▶");
-        ScrollToTime(_currentTimeMs);
     }
 
     private void TickPlayback()
     {
         if (!_audio.isPlaying) { _isPlaying = false; SetBtnText(_playBtn, "▶"); return; }
         _currentTimeMs = Mathf.RoundToInt(_audio.time * 1000f);
-        ScrollToTime(_currentTimeMs);
     }
 
     // ─────────────────────────────────────────────────
@@ -329,7 +286,7 @@ public class BeatmapEditorController : MonoBehaviour
             if (BeatmapEditorManager.Instance?.CurrentMap != null)
                 BeatmapEditorManager.Instance.SetTotalLength(totalMs);
 
-            RefreshAll();
+
             Debug.Log($"[Editor] 音频加载成功：{clip.name}，时长 {MsToString(totalMs)}");
         }
         else Debug.LogError($"[Editor] 音频加载失败：{req.error}");
@@ -369,7 +326,7 @@ public class BeatmapEditorController : MonoBehaviour
         var (undo, redo) = _undoStack.Pop();
         try { undo(); } catch (Exception e) { Debug.LogError($"[Editor] 撤销失败：{e.Message}"); return; }
         _redoStack.Push((undo, redo));
-        RefreshAll();
+
     }
 
     private void OnRedo()
@@ -378,7 +335,7 @@ public class BeatmapEditorController : MonoBehaviour
         var (undo, redo) = _redoStack.Pop();
         try { redo(); } catch (Exception e) { Debug.LogError($"[Editor] 重做失败：{e.Message}"); return; }
         _undoStack.Push((undo, redo));
-        RefreshAll();
+
     }
 
     // ─────────────────────────────────────────────────
@@ -401,7 +358,7 @@ public class BeatmapEditorController : MonoBehaviour
             () => m.SetBPMAt(t, bpm),
             () => { if (wasNew) m.RemoveBPMAt(t); else if (oldBpm > 0) m.SetBPMAt(t, oldBpm); }
         );
-        RefreshAll();
+
     }
 
     private void OnAddSvKeyframe()
@@ -420,7 +377,7 @@ public class BeatmapEditorController : MonoBehaviour
             () => m.SetSVAt(t, sv),
             () => { if (wasNew) m.RemoveSVAt(t); else if (!float.IsNaN(oldSv)) m.SetSVAt(t, oldSv); }
         );
-        RefreshAll();
+
     }
 
     // ─────────────────────────────────────────────────
@@ -436,7 +393,7 @@ public class BeatmapEditorController : MonoBehaviour
         _currentDiffIndex = (_currentDiffIndex + 1) % maps.Count;
         m.SelectMap(maps[_currentDiffIndex].Id);
         PopulateDifficultyFields();
-        RefreshAll();
+
     }
 
     private void OnNewDifficulty()
@@ -460,7 +417,7 @@ public class BeatmapEditorController : MonoBehaviour
         m.NewMap(desc, (float)Math.Round(diff, 1), Mathf.Max(1, cols), initBpm);
         _currentDiffIndex = m.CurrentSet.Beatmaps.Count - 1;
         PopulateDifficultyFields();
-        RefreshAll();
+
     }
 
     // ─────────────────────────────────────────────────
@@ -471,11 +428,6 @@ public class BeatmapEditorController : MonoBehaviour
     {
         _beatDivision = _beatDivision % 16 + 1;
         if (_beatDivDown != null) _beatDivDown.text = _beatDivision.ToString();
-        if (_beatGridRenderer != null)
-        {
-            _beatGridRenderer.beatDivision = _beatDivision;
-            RefreshRenderers();
-        }
     }
 
     /// <summary>将毫秒时间吸附到最近的节拍细分点。</summary>
@@ -490,50 +442,6 @@ public class BeatmapEditorController : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────
-    //  时间轴滚动与缩放
-    // ─────────────────────────────────────────────────
-
-    private void HandleZoomScroll()
-    {
-        if (!Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl)) return;
-        float delta = Input.GetAxis("Mouse ScrollWheel");
-        if (Mathf.Abs(delta) < 0.001f) return;
-
-        int pivot = ViewCenterTimeMs();
-        _pixelsPerMs = Mathf.Clamp(_pixelsPerMs * (delta > 0 ? 1.25f : 0.8f), 0.01f, 3f);
-        UpdateContentHeight();
-        RefreshKeyframeMarkers(); // 位置随缩放变化
-        ScrollToTime(pivot);
-    }
-
-    /// <summary>
-    /// 滚动时间轴使 timeMs 对准 Playhead。
-    /// Content 高度 = audioH + viewportH，HLG 底部留 30% viewport 作为 padding，
-    /// 因此 norm = timeMs / audioMs 恰好让 Playhead 对准目标时间。
-    /// </summary>
-    public void ScrollToTime(int timeMs)
-    {
-        if (_scrollRect == null || _contentRT == null) return;
-        Canvas.ForceUpdateCanvases();
-
-        int audioMs = TotalLengthMs();
-        if (audioMs <= 0) return;
-
-        float maxScroll = Mathf.Max(0f, _contentRT.rect.height - _scrollRect.viewport.rect.height);
-        if (maxScroll <= 0f) return;
-
-        _scrollRect.verticalNormalizedPosition = Mathf.Clamp01((float)timeMs / audioMs);
-    }
-
-    /// <summary>返回当前滚动位置对应的时间（ms）。</summary>
-    private int ViewCenterTimeMs()
-    {
-        float norm    = _scrollRect?.verticalNormalizedPosition ?? 0f;
-        int   audioMs = TotalLengthMs();
-        return Mathf.Clamp(Mathf.RoundToInt(norm * audioMs), 0, audioMs);
-    }
-
-    // ─────────────────────────────────────────────────
     //  全量刷新
     // ─────────────────────────────────────────────────
 
@@ -542,125 +450,6 @@ public class BeatmapEditorController : MonoBehaviour
     {
         PopulateSetFields();
         PopulateDifficultyFields();
-        RefreshAll();
-    }
-
-    private void RefreshAll()
-    {
-        UpdateContentHeight();
-        RefreshRenderers();
-        RefreshKeyframeMarkers();
-        _noteGridInteraction?.RefreshNotes();
-    }
-
-    private void UpdateContentHeight()
-    {
-        if (_contentRT == null) return;
-        Canvas.ForceUpdateCanvases();
-
-        float viewportH = _scrollRect?.viewport.rect.height ?? 600f;
-        float audioH    = Mathf.Max(TotalLengthMs() * _pixelsPerMs, 100f);
-
-        // Content = 音频高度 + 一个视口高度（底部 30% 为判定线留白，顶部 70%）
-        float contentH = audioH + viewportH;
-        _contentRT.sizeDelta = new Vector2(0f, contentH);
-
-        // HLG: 将子条目（各 Strip）对齐到底部并留出 padding，
-        // 使 time=0 精确落在判定线（视口 30% 处）
-        if (_contentHLG == null && _contentRT != null)
-            _contentHLG = _contentRT.GetComponent<HorizontalLayoutGroup>();
-        if (_contentHLG != null)
-        {
-            _contentHLG.childAlignment = TextAnchor.LowerLeft;
-            _contentHLG.padding = new RectOffset(
-                _contentHLG.padding.left,
-                _contentHLG.padding.right,
-                Mathf.RoundToInt(viewportH * 0.7f),  // 顶部留白（70%）
-                Mathf.RoundToInt(viewportH * 0.3f)   // 底部留白（30%）
-            );
-        }
-
-        // 各 Strip 高度 = 音频高度（HLG padding 负责定位）
-        float stripH = audioH;
-        SetStripHeight(_timeRulerRenderer, stripH);
-        SetStripHeight(_waveformRenderer,  stripH);
-        SetStripHeight(_bpmCurveRenderer?.transform.parent, stripH);
-        SetStripHeight(_svCurveRenderer?.transform.parent,  stripH);
-        SetStripHeight(_beatGridRenderer?.transform.parent, stripH);
-    }
-
-    private static void SetStripHeight(Component c, float h)
-    {
-        var rt = c?.GetComponent<RectTransform>();
-        if (rt != null) rt.sizeDelta = new Vector2(rt.sizeDelta.x, h);
-    }
-
-    private static void SetStripHeight(Transform t, float h)
-    {
-        var rt = t?.GetComponent<RectTransform>();
-        if (rt != null) rt.sizeDelta = new Vector2(rt.sizeDelta.x, h);
-    }
-
-    private void RefreshRenderers()
-    {
-        var m = BeatmapEditorManager.Instance;
-        int totalMs = TotalLengthMs();
-
-_timeRulerRenderer?.Render(totalMs);
-
-        if (m?.CurrentSet?.AudioClip != null)
-            _waveformRenderer?.RenderFull(m.CurrentSet.AudioClip);
-
-        if (m?.CurrentMap != null)
-        {
-            _bpmCurveRenderer?.Render(m.CurrentMap.BPMTimePoint, totalMs);
-            _svCurveRenderer?.Render(m.CurrentMap.SVTimePoint, totalMs);
-            _beatGridRenderer?.Render(m.CurrentMap.BPMTimePoint, totalMs, m.CurrentMap.ColumnCount);
-        }
-    }
-
-    private void RefreshKeyframeMarkers()
-    {
-        var m = BeatmapEditorManager.Instance;
-        if (m?.CurrentMap == null) return;
-
-        ClearChildren(_bpmKFContainer);
-        ClearChildren(_svKFContainer);
-
-        int totalMs = TotalLengthMs();
-        if (totalMs <= 0) return;
-
-        foreach (var p in m.CurrentMap.BPMTimePoint)
-            SpawnMarker(_bpmKFContainer, KeyframeMarker.MarkerType.BPM, p.Time, p.BPM);
-
-        foreach (var p in m.CurrentMap.SVTimePoint)
-            SpawnMarker(_svKFContainer, KeyframeMarker.MarkerType.SV, p.Time, p.SV);
-    }
-
-    private void SpawnMarker(RectTransform container, KeyframeMarker.MarkerType type, int timeMs, float value)
-    {
-        if (_markerTemplate == null || container == null) return;
-
-        var go = Instantiate(_markerTemplate, container);
-        var rt = go.GetComponent<RectTransform>();
-        // 新坐标系：锚点在底部，向上偏移（time=0 在底部）
-        rt.anchorMin = new Vector2(0f, 0f);
-        rt.anchorMax = new Vector2(1f, 0f);
-        rt.pivot     = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(0f, 20f);
-        rt.anchoredPosition = new Vector2(0f, timeMs * _pixelsPerMs);
-
-        var marker = go.GetComponent<KeyframeMarker>();
-        marker.Init(type, timeMs, value);
-
-        // 颜色区分：BPM = 橙，SV = 青
-        var img = go.GetComponent<Image>();
-        if (img != null)
-            img.color = type == KeyframeMarker.MarkerType.BPM
-                ? new Color(1.00f, 0.50f, 0.10f, 0.80f)
-                : new Color(0.10f, 0.80f, 0.90f, 0.80f);
-
-        go.SetActive(true);
     }
 
     // ─────────────────────────────────────────────────
@@ -694,8 +483,6 @@ _timeRulerRenderer?.Render(totalMs);
     //  工具方法
     // ─────────────────────────────────────────────────
 
-    public float PixelsPerMs => _pixelsPerMs;
-
     public int TotalLengthMs()
     {
         var set = BeatmapEditorManager.Instance?.CurrentSet;
@@ -727,35 +514,6 @@ _timeRulerRenderer?.Render(totalMs);
         return $"{m:00}:{s:00}.{r:000}";
     }
 
-    private void BuildMarkerTemplate()
-    {
-        _markerTemplate = new GameObject("_MarkerTemplate", typeof(RectTransform));
-        _markerTemplate.SetActive(false);
-        DontDestroyOnLoad(_markerTemplate);
-
-        _markerTemplate.AddComponent<Image>();
-        _markerTemplate.AddComponent<Button>();
-        _markerTemplate.AddComponent<KeyframeMarker>();
-
-        // 标签
-        var label = new GameObject("Label", typeof(RectTransform));
-        label.transform.SetParent(_markerTemplate.transform, false);
-        var lrt = label.GetComponent<RectTransform>();
-        lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one;
-        lrt.offsetMin = new Vector2(3f, 0f); lrt.offsetMax = Vector2.zero;
-        var txt = label.AddComponent<TextMeshProUGUI>();
-        txt.fontSize  = 11;
-        txt.color     = Color.white;
-        txt.alignment = TextAlignmentOptions.MidlineLeft;
-        txt.raycastTarget = false;
-    }
-
-    private static void ClearChildren(RectTransform rt)
-    {
-        if (rt == null) return;
-        for (int i = rt.childCount - 1; i >= 0; i--)
-            Destroy(rt.GetChild(i).gameObject);
-    }
 
     private static void SetBtnText(Button btn, string text)
     {
